@@ -1,0 +1,6 @@
+{
+  "name": "Neo Strike 2D: TV & Phone PvP",
+  "description": "Local multiplayer 2D PvP shooter supporting TV mode with authoritative gameplay and Phone mode as wireless game controllers.",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

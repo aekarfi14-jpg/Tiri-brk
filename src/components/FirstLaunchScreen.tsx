@@ -11,11 +11,11 @@ export const FirstLaunchScreen: React.FC<FirstLaunchScreenProps> = ({ onSelectMo
   const [isMuted, setIsMuted] = useState(sound.getMuted());
 
   useEffect(() => {
-    // Show splash screen for 1.8 seconds then transition to mode selection
+    // Show splash screen for 1.5 seconds then transition to mode selection
     const timer = setTimeout(() => {
       setShowSplash(false);
       sound.playClick();
-    }, 1800);
+    }, 1500);
     return () => clearTimeout(timer);
   }, []);
 
@@ -42,12 +42,12 @@ export const FirstLaunchScreen: React.FC<FirstLaunchScreenProps> = ({ onSelectMo
           </div>
           <div className="space-y-1">
             <p className="text-xs uppercase tracking-[0.3em] text-cyan-400 font-bold">
-              ARCADE PULSE LABS PRESENTS
+              LAN MULTIPLAYER SHOOTER
             </p>
             <h1 className="text-4xl md:text-5xl font-black tracking-tight font-['Chakra_Petch'] bg-gradient-to-r from-white via-slate-100 to-cyan-300 bg-clip-text text-transparent">
-              NEO STRIKE 2D
+              TIRI BRK
             </h1>
-            <p className="text-slate-400 text-sm">Local PvP Arena • Wireless Phone Controllers</p>
+            <p className="text-slate-400 text-sm">لعبة إطلاق نار محلية • التلفاز شاشة والهاتف يد تحكم</p>
           </div>
         </div>
       </div>
@@ -75,33 +75,33 @@ export const FirstLaunchScreen: React.FC<FirstLaunchScreenProps> = ({ onSelectMo
         <div className="space-y-2">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 text-xs font-semibold tracking-wider">
             <Sparkles className="w-3.5 h-3.5" />
-            LOCAL MULTIPLAYER DUAL-MODE
+            TIRI BRK • تيري برك
           </div>
           <h1 className="text-4xl md:text-6xl font-black font-['Chakra_Petch'] tracking-wide">
-            SELECT DEVICE ROLE
+            اختر دور الجهاز
           </h1>
           <p className="text-slate-400 text-sm md:text-base max-w-md mx-auto">
-            Run the authoritative game on your TV, and use Android phones as wireless gamepad controllers.
+            يعرض التلفاز شاشة اللعبة والخريطة، وتعمل الهواتف كأجهزة تحكم لاسلكية عبر شبكة Wi-Fi المحلية.
           </p>
         </div>
 
-        {/* Two Large Choices */}
+        {/* Two Large Choices: TV vs Phone */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full max-w-xl">
           {/* TV Choice */}
           <button
             id="btn-select-tv-mode"
             onClick={() => handleModeClick('tv')}
-            className="group relative flex flex-col items-center justify-center p-8 rounded-2xl bg-gradient-to-b from-slate-800/90 to-slate-900/90 border-2 border-slate-700 hover:border-cyan-400 hover:shadow-[0_0_40px_rgba(56,189,248,0.3)] transition-all duration-300 text-left active:scale-[0.98] cursor-pointer"
+            className="group relative flex flex-col items-center justify-center p-8 rounded-3xl bg-gradient-to-b from-slate-800/90 to-slate-900/90 border-2 border-slate-700 hover:border-cyan-400 hover:shadow-[0_0_40px_rgba(56,189,248,0.3)] transition-all duration-300 text-left active:scale-[0.98] cursor-pointer"
           >
             <div className="p-5 rounded-2xl bg-cyan-500/10 group-hover:bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 mb-5 transition-colors">
               <Tv className="w-12 h-12 group-hover:scale-110 transition-transform" />
             </div>
             <div className="text-center">
               <span className="text-2xl font-bold font-['Chakra_Petch'] tracking-wide block mb-1 text-white group-hover:text-cyan-300">
-                📺 TV MODE
+                📺 شاشة التلفاز (TV)
               </span>
               <p className="text-xs text-slate-400 leading-relaxed">
-                Run the game arena, display the room QR code, and host the authoritative PvP match.
+                تشغيل خريطة اللعبة ورمز QR واستضافة المباراة محلياً.
               </p>
             </div>
             <div className="mt-6 px-4 py-1.5 rounded-lg bg-cyan-500/20 border border-cyan-500/40 text-cyan-300 text-xs font-bold tracking-wider uppercase">
@@ -113,17 +113,17 @@ export const FirstLaunchScreen: React.FC<FirstLaunchScreenProps> = ({ onSelectMo
           <button
             id="btn-select-phone-mode"
             onClick={() => handleModeClick('phone')}
-            className="group relative flex flex-col items-center justify-center p-8 rounded-2xl bg-gradient-to-b from-slate-800/90 to-slate-900/90 border-2 border-slate-700 hover:border-emerald-400 hover:shadow-[0_0_40px_rgba(16,185,129,0.3)] transition-all duration-300 text-left active:scale-[0.98] cursor-pointer"
+            className="group relative flex flex-col items-center justify-center p-8 rounded-3xl bg-gradient-to-b from-slate-800/90 to-slate-900/90 border-2 border-slate-700 hover:border-emerald-400 hover:shadow-[0_0_40px_rgba(16,185,129,0.3)] transition-all duration-300 text-left active:scale-[0.98] cursor-pointer"
           >
             <div className="p-5 rounded-2xl bg-emerald-500/10 group-hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 mb-5 transition-colors">
               <Smartphone className="w-12 h-12 group-hover:scale-110 transition-transform" />
             </div>
             <div className="text-center">
               <span className="text-2xl font-bold font-['Chakra_Petch'] tracking-wide block mb-1 text-white group-hover:text-emerald-300">
-                📱 PHONE MODE
+                📱 هاتف التحكم (Controller)
               </span>
               <p className="text-xs text-slate-400 leading-relaxed">
-                Scan the TV's QR code and turn your smartphone into a high-precision wireless gamepad.
+                مسح رمز QR أو إدخال الكود وتحويل الهاتف إلى يد تحكم لاسلكية.
               </p>
             </div>
             <div className="mt-6 px-4 py-1.5 rounded-lg bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-xs font-bold tracking-wider uppercase">
@@ -133,9 +133,9 @@ export const FirstLaunchScreen: React.FC<FirstLaunchScreenProps> = ({ onSelectMo
         </div>
 
         <div className="text-xs text-slate-500 flex items-center gap-2">
-          <span>Developed by Arcade Pulse Labs</span>
+          <span>Tiri BRK • تيري برك</span>
           <span>•</span>
-          <span>Single Unified APK Build</span>
+          <span>100% LAN Local Offline</span>
         </div>
       </div>
     </div>

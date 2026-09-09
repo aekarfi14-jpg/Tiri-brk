@@ -366,39 +366,36 @@ export default function App() {
   // TV Host Actions
   const handleTvStartMatch = () => {
     if (!engineRef.current) return;
+    const connectedPlayers = tvPlayers.filter((p) => p.connected);
+    if (connectedPlayers.length === 0) return;
     isPracticeRef.current.isPractice = false;
     sound.playClick();
-    engineRef.current.initMatch(tvPlayers);
-  };
-
-  const handleTvStartPracticeMatch = (botCount: number = 2) => {
-    if (!engineRef.current) return;
-    isPracticeRef.current = { isPractice: true, botCount };
-    sound.playClick();
-
-    // If no human player is registered yet, create Slot 1 player
-    let roster = [...tvPlayers];
-    if (roster.length === 0) {
-      roster.push({
-        slot: 1,
-        id: `player_1_host`,
-        name: 'Player 1',
-        team: 'RED',
-        ready: true,
-        connected: true,
-      });
-      setTvPlayers(roster);
+    engineRef.current.initMatch(connectedPlayers);
+    setMatchState('PLAYING');
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send(
+        JSON.stringify({
+          type: 'tv:match_state',
+          matchState: 'PLAYING',
+        })
+      );
     }
-    engineRef.current.initPracticeMatch(roster, botCount);
   };
 
   const handleTvRematch = () => {
     if (!engineRef.current) return;
     sound.playClick();
-    if (isPracticeRef.current.isPractice) {
-      engineRef.current.initPracticeMatch(tvPlayers, isPracticeRef.current.botCount);
-    } else {
-      engineRef.current.initMatch(tvPlayers);
+    const connectedPlayers = tvPlayers.filter((p) => p.connected);
+    if (connectedPlayers.length === 0) return;
+    engineRef.current.initMatch(connectedPlayers);
+    setMatchState('PLAYING');
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send(
+        JSON.stringify({
+          type: 'tv:match_state',
+          matchState: 'PLAYING',
+        })
+      );
     }
   };
 
@@ -450,30 +447,6 @@ export default function App() {
       );
     }
     setTvPlayers((prev) => prev.filter((p) => p.slot !== slot));
-  };
-
-  // Add Simulated Test Player (for rapid in-preview testing)
-  const handleAddSimulatedPlayer = () => {
-    sound.playClick();
-    let nextSlot = 1;
-    for (let i = 1; i <= 4; i++) {
-      if (!tvPlayers.some((p) => p.slot === i)) {
-        nextSlot = i;
-        break;
-      }
-    }
-
-    const teams: TeamId[] = ['RED', 'BLUE', 'GREEN', 'RED'];
-    const newPlayer: PlayerSlotData = {
-      slot: nextSlot,
-      id: `sim_${Date.now()}_${nextSlot}`,
-      name: `Test Player ${nextSlot}`,
-      team: teams[nextSlot - 1],
-      ready: true,
-      connected: true,
-    };
-
-    setTvPlayers((prev) => [...prev, newPlayer].sort((a, b) => a.slot - b.slot));
   };
 
   // Phone Actions
@@ -565,10 +538,8 @@ export default function App() {
             roomCode={roomCode}
             players={tvPlayers}
             onStartMatch={handleTvStartMatch}
-            onStartPracticeMatch={handleTvStartPracticeMatch}
             onUpdatePlayer={handleTvUpdatePlayer}
             onKickPlayer={handleTvKickPlayer}
-            onAddSimulatedPlayer={handleAddSimulatedPlayer}
             onOpenPhoneSim={(slot) => setSimSlot(slot)}
             onSwitchMode={() => {
               setMode('select');

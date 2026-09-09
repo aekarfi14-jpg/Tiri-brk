@@ -1,8 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { PlayerInput, TeamId, TEAMS, WeaponType } from '../../types.ts';
-import { PHYSICS, WEAPONS } from '../../game/constants.ts';
-import { Shield, Zap, Flame, ArrowUp, FastForward, Wifi, Sparkles } from 'lucide-react';
-import { sound } from '../../audio/soundEngine.ts';
+import { PHYSICS } from '../../game/constants.ts';
+import { Shield, Zap, Flame, ArrowUp, FastForward, Wifi, LogOut } from 'lucide-react';
 
 interface PhoneControllerProps {
   slot: number;
@@ -27,6 +26,8 @@ export const PhoneController: React.FC<PhoneControllerProps> = ({
   onSendInput,
   onDisconnect,
 }) => {
+  const seqRef = useRef(0);
+
   // Input states
   const inputRef = useRef<PlayerInput>({
     moveX: 0,
@@ -39,11 +40,12 @@ export const PhoneController: React.FC<PhoneControllerProps> = ({
     dash: false,
     switchWeapon: false,
     shield: false,
+    seq: 0,
   });
 
   const [currentWeapon, setCurrentWeapon] = useState<WeaponType>(selectedWeapon);
   const [shieldActive, setShieldActive] = useState(false);
-  const [shieldCooldownPct, setShieldCooldownPct] = useState(0); // 0 = ready, 1 = full cooldown
+  const [shieldCooldownPct, setShieldCooldownPct] = useState(0);
   const [dashCooldownPct, setDashCooldownPct] = useState(0);
 
   // Timers
@@ -51,7 +53,7 @@ export const PhoneController: React.FC<PhoneControllerProps> = ({
   const shieldCdEndRef = useRef(0);
   const dashCdEndRef = useRef(0);
 
-  // Virtual Joystick references
+  // Move Joystick references
   const joystickBaseRef = useRef<HTMLDivElement | null>(null);
   const joystickPointerId = useRef<number | null>(null);
   const [joystickThumb, setJoystickThumb] = useState({ x: 0, y: 0 });
@@ -61,8 +63,8 @@ export const PhoneController: React.FC<PhoneControllerProps> = ({
   const aimPointerId = useRef<number | null>(null);
   const [aimThumb, setAimThumb] = useState({ x: 0, y: 0 });
 
-  // Haptic trigger
-  const triggerHaptic = useCallback((ms = 18) => {
+  // Haptic feedback
+  const triggerHaptic = useCallback((ms = 20) => {
     if (typeof navigator !== 'undefined' && navigator.vibrate) {
       try {
         navigator.vibrate(ms);
@@ -72,17 +74,18 @@ export const PhoneController: React.FC<PhoneControllerProps> = ({
     }
   }, []);
 
-  // Send input changes
+  // Send input changes with monotonic sequence counter
   const flushInput = useCallback(() => {
+    seqRef.current++;
+    inputRef.current.seq = seqRef.current;
     onSendInput({ ...inputRef.current });
   }, [onSendInput]);
 
-  // Periodic input stream (approx 45Hz) to keep TV perfectly in sync
+  // Periodic input stream (~45Hz) to keep TV engine smoothly updated
   useEffect(() => {
     const interval = setInterval(() => {
       flushInput();
 
-      // Cooldown timer updates
       const now = performance.now();
 
       // Shield timers
@@ -111,7 +114,7 @@ export const PhoneController: React.FC<PhoneControllerProps> = ({
     return () => clearInterval(interval);
   }, [flushInput]);
 
-  // Left Joystick Touch Handlers
+  // Left Joystick (Movement)
   const handleJoystickStart = (e: React.PointerEvent) => {
     if (joystickPointerId.current !== null) return;
     joystickPointerId.current = e.pointerId;
@@ -137,8 +140,7 @@ export const PhoneController: React.FC<PhoneControllerProps> = ({
     const thumbY = Math.sin(angle) * clampedDist;
     setJoystickThumb({ x: thumbX, y: thumbY });
 
-    // Deadzone
-    if (distance < 10) {
+    if (distance < 8) {
       inputRef.current.moveX = 0;
       inputRef.current.moveY = 0;
     } else {
@@ -155,7 +157,7 @@ export const PhoneController: React.FC<PhoneControllerProps> = ({
     inputRef.current.moveY = 0;
   };
 
-  // Aim Joystick Touch Handlers
+  // Right Joystick (Aiming)
   const handleAimStart = (e: React.PointerEvent) => {
     if (aimPointerId.current !== null) return;
     aimPointerId.current = e.pointerId;
@@ -181,7 +183,7 @@ export const PhoneController: React.FC<PhoneControllerProps> = ({
     const thumbY = Math.sin(angle) * clampedDist;
     setAimThumb({ x: thumbX, y: thumbY });
 
-    if (distance < 12) {
+    if (distance < 10) {
       inputRef.current.aimX = 0;
       inputRef.current.aimY = 0;
       inputRef.current.isAiming = false;
@@ -199,10 +201,10 @@ export const PhoneController: React.FC<PhoneControllerProps> = ({
     inputRef.current.isAiming = false;
   };
 
-  // Button actions
+  // Action Button Handlers
   const setFire = (isDown: boolean) => {
     if (isDown && !inputRef.current.fire) {
-      triggerHaptic(24);
+      triggerHaptic(25);
     }
     inputRef.current.fire = isDown;
     flushInput();
@@ -210,7 +212,7 @@ export const PhoneController: React.FC<PhoneControllerProps> = ({
 
   const setJump = (isDown: boolean) => {
     if (isDown && !inputRef.current.jump) {
-      triggerHaptic(18);
+      triggerHaptic(20);
     }
     inputRef.current.jump = isDown;
     flushInput();
@@ -263,53 +265,55 @@ export const PhoneController: React.FC<PhoneControllerProps> = ({
   return (
     <div
       id="phone-gamepad-container"
-      className="fixed inset-0 bg-[#090d16] text-white flex flex-col select-none overflow-hidden touch-none"
+      className="fixed inset-0 bg-[#070a12] text-white flex flex-col select-none overflow-hidden touch-none"
     >
       {/* Top Ergonomic Status Bar */}
-      <div className="relative z-20 flex items-center justify-between px-4 py-2 bg-slate-900/90 border-b border-slate-800">
+      <div className="relative z-20 flex items-center justify-between px-3 md:px-5 py-2 bg-slate-900/90 border-b border-slate-800">
         <div className="flex items-center gap-2">
           <span
-            className="w-6 h-6 rounded-lg flex items-center justify-center text-xs font-black text-white"
+            className="w-7 h-7 rounded-xl flex items-center justify-center text-xs font-black text-white shadow-md font-mono"
             style={{ backgroundColor: teamDef.color }}
           >
             P{slot}
           </span>
-          <span className="font-bold text-sm font-['Chakra_Petch'] truncate max-w-[110px]">
+          <span className="font-bold text-sm font-['Chakra_Petch'] truncate max-w-[120px]">
             {playerName}
           </span>
         </div>
 
-        {/* Protection / Shield Button (Center Top) */}
+        {/* Shield / Protection Button (Center) */}
         <button
           id="btn-controller-shield"
           type="button"
           onClick={activateShield}
           disabled={shieldCooldownPct > 0 || shieldActive}
-          className={`px-4 py-2 rounded-2xl font-black text-xs font-['Chakra_Petch'] tracking-wider flex items-center gap-2 transition-all cursor-pointer border shadow-lg ${
+          className={`px-3 md:px-4 py-1.5 rounded-xl font-black text-xs font-['Chakra_Petch'] tracking-wider flex items-center gap-1.5 transition-all cursor-pointer border ${
             shieldActive
               ? 'bg-cyan-500 border-cyan-300 text-white shadow-[0_0_20px_#38bdf8] animate-pulse'
               : shieldCooldownPct > 0
-              ? 'bg-slate-800 border-slate-700 text-slate-400 opacity-60'
+              ? 'bg-slate-800 border-slate-700 text-slate-500 opacity-60'
               : 'bg-cyan-600/30 hover:bg-cyan-600/50 border-cyan-400 text-cyan-200'
           }`}
         >
-          <Shield className="w-4 h-4 text-cyan-300" />
-          {shieldActive
-            ? 'PROTECTED!'
-            : shieldCooldownPct > 0
-            ? `SHIELD (${Math.ceil(shieldCooldownPct * 10)}s)`
-            : 'SHIELD / PAUSE'}
+          <Shield className="w-3.5 h-3.5 text-cyan-300" />
+          <span>
+            {shieldActive
+              ? 'PROTECTED!'
+              : shieldCooldownPct > 0
+              ? `SHIELD (${Math.ceil(shieldCooldownPct * 10)}s)`
+              : 'SHIELD'}
+          </span>
         </button>
 
-        {/* HP Bar and Connection Latency */}
+        {/* HP Bar, Latency & Disconnect */}
         <div className="flex items-center gap-2">
           {typeof latencyMs === 'number' && (
             <span className="hidden sm:flex items-center gap-1 px-1.5 py-0.5 rounded bg-slate-800 text-[10px] font-mono text-emerald-400 border border-slate-700">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              <Wifi className="w-2.5 h-2.5" />
               {latencyMs}ms
             </span>
           )}
-          <div className="w-20 md:w-32 h-3 bg-slate-950 rounded-full overflow-hidden border border-slate-700">
+          <div className="w-16 sm:w-24 h-2.5 bg-slate-950 rounded-full overflow-hidden border border-slate-700">
             <div
               className="h-full rounded-full transition-all duration-150"
               style={{
@@ -319,15 +323,27 @@ export const PhoneController: React.FC<PhoneControllerProps> = ({
               }}
             />
           </div>
-          <span className="text-[11px] font-mono text-slate-400">{Math.ceil(hp)} HP</span>
+          <span className="text-[11px] font-mono font-bold text-slate-300">
+            {Math.ceil(hp)}
+          </span>
+
+          {onDisconnect && (
+            <button
+              onClick={onDisconnect}
+              className="p-1 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-red-400 transition-colors ml-1 cursor-pointer"
+              title="Leave"
+            >
+              <LogOut className="w-4 h-4" />
+            </button>
+          )}
         </div>
       </div>
 
-      {/* Main Controller Body: Left Joystick + Right Action Pad */}
-      <div className="flex-1 flex items-center justify-between p-4 md:p-8 relative">
-        {/* LEFT SIDE: Large Movement Virtual Joystick */}
-        <div className="flex flex-col items-center justify-center">
-          <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-2">
+      {/* Main Controller Body */}
+      <div className="flex-1 flex flex-col md:flex-row items-center justify-between p-3 md:p-6 gap-3 relative overflow-hidden">
+        {/* LEFT SIDE: Movement Analog Joystick */}
+        <div className="flex flex-col items-center justify-center select-none">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">
             MOVE JOYSTICK
           </span>
           <div
@@ -337,28 +353,25 @@ export const PhoneController: React.FC<PhoneControllerProps> = ({
             onPointerMove={handleJoystickMove}
             onPointerUp={handleJoystickEnd}
             onPointerCancel={handleJoystickEnd}
-            className="relative w-44 h-44 md:w-52 md:h-52 rounded-full bg-slate-900/90 border-2 border-slate-700 shadow-[inset_0_0_25px_rgba(0,0,0,0.8)] flex items-center justify-center touch-none cursor-pointer"
+            className="relative w-36 h-36 md:w-48 md:h-48 rounded-full bg-slate-900/90 border-2 border-slate-700 shadow-[inset_0_0_25px_rgba(0,0,0,0.8)] flex items-center justify-center touch-none cursor-pointer"
           >
-            {/* Center ring marker */}
-            <div className="w-16 h-16 rounded-full border border-slate-700/60 pointer-events-none" />
-
-            {/* Draggable thumb nub */}
+            <div className="w-12 h-12 md:w-16 md:h-16 rounded-full border border-slate-700/60 pointer-events-none" />
             <div
-              className="absolute w-20 h-20 md:w-24 md:h-24 rounded-full bg-gradient-to-br from-cyan-500 to-blue-600 border-2 border-white shadow-[0_0_20px_rgba(56,189,248,0.5)] pointer-events-none transition-transform duration-75 flex items-center justify-center text-white"
+              className="absolute w-16 h-16 md:w-22 md:h-22 rounded-full bg-gradient-to-br from-cyan-500 to-blue-600 border-2 border-white shadow-[0_0_20px_rgba(56,189,248,0.5)] pointer-events-none transition-transform duration-75 flex items-center justify-center text-white"
               style={{
                 transform: `translate(${joystickThumb.x}px, ${joystickThumb.y}px)`,
               }}
             >
-              <div className="w-8 h-8 rounded-full bg-white/20" />
+              <div className="w-6 h-6 rounded-full bg-white/25" />
             </div>
           </div>
         </div>
 
-        {/* RIGHT SIDE: Action Buttons (Fire, Jump, Aim, Dash, Weapon Switch) */}
-        <div className="flex items-center gap-4 md:gap-8">
-          {/* Aim Control Touch Pad */}
-          <div className="flex flex-col items-center">
-            <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-2">
+        {/* RIGHT SIDE: Aim Joystick & Action Cluster */}
+        <div className="flex items-center gap-3 md:gap-6 select-none">
+          {/* Aim Direction Joystick */}
+          <div className="flex flex-col items-center justify-center">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">
               AIM DIRECTION
             </span>
             <div
@@ -368,67 +381,67 @@ export const PhoneController: React.FC<PhoneControllerProps> = ({
               onPointerMove={handleAimMove}
               onPointerUp={handleAimEnd}
               onPointerCancel={handleAimEnd}
-              className="relative w-36 h-36 md:w-44 md:h-44 rounded-full bg-slate-900/90 border-2 border-slate-700 shadow-[inset_0_0_25px_rgba(0,0,0,0.8)] flex items-center justify-center touch-none cursor-pointer"
+              className="relative w-32 h-32 md:w-42 md:h-42 rounded-full bg-slate-900/90 border-2 border-slate-700 shadow-[inset_0_0_25px_rgba(0,0,0,0.8)] flex items-center justify-center touch-none cursor-pointer"
             >
-              <div className="w-12 h-12 rounded-full border border-slate-700/60 pointer-events-none" />
+              <div className="w-10 h-10 md:w-12 md:h-12 rounded-full border border-slate-700/60 pointer-events-none" />
               <div
-                className="absolute w-16 h-16 rounded-full bg-gradient-to-br from-slate-700 to-slate-800 border-2 border-cyan-400 shadow-[0_0_15px_rgba(56,189,248,0.4)] pointer-events-none transition-transform duration-75 flex items-center justify-center"
+                className="absolute w-14 h-14 md:w-18 md:h-18 rounded-full bg-gradient-to-br from-slate-700 to-slate-800 border-2 border-cyan-400 shadow-[0_0_15px_rgba(56,189,248,0.4)] pointer-events-none transition-transform duration-75 flex items-center justify-center"
                 style={{
                   transform: `translate(${aimThumb.x}px, ${aimThumb.y}px)`,
                 }}
               >
-                <div className="w-4 h-4 rounded-full bg-cyan-400" />
+                <div className="w-3.5 h-3.5 rounded-full bg-cyan-400" />
               </div>
             </div>
           </div>
 
-          {/* Core Action Cluster: Jump, Dash, Switch, Large Fire */}
-          <div className="flex flex-col gap-3">
-            <div className="flex gap-3">
+          {/* Action Buttons: Jump, Dash, Switch, Big Fire */}
+          <div className="flex flex-col gap-2.5">
+            <div className="flex gap-2">
               {/* Weapon Switch Button */}
               <button
                 id="btn-controller-weapon-switch"
                 type="button"
                 onClick={setSwitchWeapon}
-                className="w-18 h-18 md:w-20 md:h-20 rounded-2xl bg-slate-800 hover:bg-slate-700 border-2 border-slate-600 active:scale-95 transition-all flex flex-col items-center justify-center cursor-pointer shadow-lg"
+                className="w-14 h-14 md:w-16 md:h-16 rounded-2xl bg-slate-800 hover:bg-slate-700 border-2 border-slate-600 active:scale-95 transition-all flex flex-col items-center justify-center cursor-pointer shadow-lg"
               >
                 {currentWeapon === 'RIFLE' ? (
-                  <Zap className="w-6 h-6 text-cyan-400" />
+                  <Zap className="w-5 h-5 text-cyan-400" />
                 ) : (
-                  <Flame className="w-6 h-6 text-orange-400" />
+                  <Flame className="w-5 h-5 text-orange-400" />
                 )}
-                <span className="text-[10px] font-black mt-0.5 text-slate-300">
+                <span className="text-[9px] font-black mt-0.5 text-slate-300">
                   {currentWeapon === 'RIFLE' ? 'RIFLE' : 'SHOTGUN'}
                 </span>
               </button>
 
-              {/* Dash / Speed Button */}
+              {/* Dash Button */}
               <button
                 id="btn-controller-dash"
                 type="button"
                 onPointerDown={() => setDash(true)}
                 disabled={dashCooldownPct > 0}
-                className={`w-18 h-18 md:w-20 md:h-20 rounded-2xl border-2 active:scale-95 transition-all flex flex-col items-center justify-center cursor-pointer shadow-lg ${
+                className={`w-14 h-14 md:w-16 md:h-16 rounded-2xl border-2 active:scale-95 transition-all flex flex-col items-center justify-center cursor-pointer shadow-lg ${
                   dashCooldownPct > 0
                     ? 'bg-slate-800 border-slate-700 text-slate-500 opacity-60'
                     : 'bg-gradient-to-br from-amber-500 to-yellow-600 border-amber-300 text-white shadow-amber-500/20'
                 }`}
               >
-                <FastForward className="w-6 h-6" />
-                <span className="text-[10px] font-black mt-0.5">DASH</span>
+                <FastForward className="w-5 h-5" />
+                <span className="text-[9px] font-black mt-0.5">DASH</span>
               </button>
 
-              {/* Jump Button */}
+              {/* Single Jump Button */}
               <button
                 id="btn-controller-jump"
                 type="button"
                 onPointerDown={() => setJump(true)}
                 onPointerUp={() => setJump(false)}
                 onPointerCancel={() => setJump(false)}
-                className="w-18 h-18 md:w-20 md:h-20 rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-700 border-2 border-blue-400 active:scale-95 text-white transition-all flex flex-col items-center justify-center cursor-pointer shadow-lg shadow-blue-500/20"
+                className="w-14 h-14 md:w-16 md:h-16 rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-700 border-2 border-blue-400 active:scale-95 text-white transition-all flex flex-col items-center justify-center cursor-pointer shadow-lg shadow-blue-500/20"
               >
-                <ArrowUp className="w-7 h-7 stroke-[3]" />
-                <span className="text-[10px] font-black mt-0.5">JUMP</span>
+                <ArrowUp className="w-6 h-6 stroke-[3]" />
+                <span className="text-[9px] font-black mt-0.5">JUMP</span>
               </button>
             </div>
 
@@ -439,10 +452,10 @@ export const PhoneController: React.FC<PhoneControllerProps> = ({
               onPointerDown={() => setFire(true)}
               onPointerUp={() => setFire(false)}
               onPointerCancel={() => setFire(false)}
-              className="w-full h-24 md:h-28 rounded-3xl bg-gradient-to-r from-red-600 via-rose-500 to-red-600 hover:from-red-500 hover:to-red-500 border-4 border-white active:scale-95 text-white font-black text-2xl font-['Chakra_Petch'] tracking-widest transition-all shadow-[0_0_35px_rgba(239,68,68,0.5)] cursor-pointer flex items-center justify-center gap-3"
+              className="w-full h-20 md:h-24 rounded-2xl bg-gradient-to-r from-red-600 via-rose-500 to-red-600 hover:from-red-500 active:scale-95 text-white font-black text-xl font-['Chakra_Petch'] tracking-widest transition-all shadow-[0_0_30px_rgba(239,68,68,0.5)] border-2 border-white/80 cursor-pointer flex items-center justify-center gap-2"
             >
-              <Zap className="w-8 h-8 fill-current animate-pulse" />
-              FIRE
+              <Zap className="w-6 h-6 fill-current animate-pulse" />
+              <span>إطلاق • FIRE</span>
             </button>
           </div>
         </div>

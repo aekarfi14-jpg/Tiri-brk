@@ -54,17 +54,27 @@ export interface WeaponDef {
 }
 
 export interface PlayerInput {
-  moveX: number; // -1 to 1
-  moveY: number; // -1 to 1
-  aimX: number; // -1 to 1
-  aimY: number; // -1 to 1
+  moveX: number; // -1 to 1 analog
+  moveY: number; // -1 to 1 analog
+  aimX: number; // -1 to 1 analog
+  aimY: number; // -1 to 1 analog
   isAiming: boolean;
   fire: boolean;
   jump: boolean;
-  dash: boolean;
-  switchWeapon: boolean;
-  shield: boolean;
+  dash?: boolean;
+  switchWeapon?: boolean;
+  shield?: boolean;
+  seq?: number;
 }
+
+export type ConnectionState =
+  | 'DISCONNECTED'
+  | 'CONNECTING'
+  | 'CONNECTED'
+  | 'LOBBY'
+  | 'READY'
+  | 'PLAYING'
+  | 'RECONNECTING';
 
 export interface PlayerSlotData {
   slot: number; // 1 to 4

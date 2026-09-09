@@ -11,6 +11,11 @@ const PORT = 3000;
 
 app.use(express.json());
 
+// Health check endpoint
+app.get("/api/health", (req, res) => {
+  res.json({ status: "ok" });
+});
+
 // API to return local network IP for TV QR codes and physical phone controllers
 app.get("/api/host-info", (req, res) => {
   const interfaces = os.networkInterfaces();
@@ -507,7 +512,7 @@ async function startServer() {
   }
 
   server.listen(PORT, "0.0.0.0", () => {
-    console.log(`Neo Strike 2D server running on http://0.0.0.0:${PORT}`);
+    console.log(`Tiri BRK LAN server running on http://0.0.0.0:${PORT}`);
   });
 }
 

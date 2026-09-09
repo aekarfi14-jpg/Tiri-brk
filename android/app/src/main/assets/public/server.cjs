@@ -188,16 +188,32 @@ wss.on("connection", (ws) => {
         const pId = incomingId || `player_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
         const pName = msg.name || `Player ${targetSlot}`;
         const pTeam = msg.team || teamDefaults[targetSlot - 1];
-        const session = {
-          slot: targetSlot,
-          id: pId,
-          name: pName,
-          team: pTeam,
-          ready: false,
-          ws,
-          lastPing: Date.now()
-        };
-        room.players.set(targetSlot, session);
+        const isReconnect = existingSlot !== null;
+        let session;
+        if (isReconnect && room.players.has(existingSlot)) {
+          session = room.players.get(existingSlot);
+          if (session.disconnectTimer) {
+            clearTimeout(session.disconnectTimer);
+            session.disconnectTimer = void 0;
+          }
+          session.ws = ws;
+          session.connected = true;
+          session.lastPing = Date.now();
+          if (msg.name) session.name = msg.name;
+          if (msg.team) session.team = msg.team;
+        } else {
+          session = {
+            slot: targetSlot,
+            id: pId,
+            name: pName,
+            team: pTeam,
+            ready: false,
+            ws,
+            lastPing: Date.now(),
+            connected: true
+          };
+          room.players.set(targetSlot, session);
+        }
         boundRoomCode = code;
         boundRole = "phone";
         boundSlot = targetSlot;
@@ -207,17 +223,18 @@ wss.on("connection", (ws) => {
           code,
           slot: targetSlot,
           playerId: pId,
-          name: pName,
-          team: pTeam,
-          matchState: room.matchState
+          name: session.name,
+          team: session.team,
+          matchState: room.matchState,
+          isReconnect
         });
         safeSend(room.tvWs, {
-          type: "player:joined",
+          type: isReconnect ? "player:reconnected" : "player:joined",
           slot: targetSlot,
           id: pId,
-          name: pName,
-          team: pTeam,
-          ready: false
+          name: session.name,
+          team: session.team,
+          ready: session.ready
         });
         const roster = Array.from(room.players.values()).map((p) => ({
           slot: p.slot,
@@ -369,26 +386,43 @@ wss.on("connection", (ws) => {
             });
           }
         } else if (boundRole === "phone" && boundSlot !== null) {
-          room.players.delete(boundSlot);
-          if (room.tvWs) {
-            safeSend(room.tvWs, {
-              type: "player:left",
-              slot: boundSlot
-            });
-          }
-          const roster = Array.from(room.players.values()).map((p) => ({
-            slot: p.slot,
-            id: p.id,
-            name: p.name,
-            team: p.team,
-            ready: p.ready
-          }));
-          for (const p of room.players.values()) {
-            safeSend(p.ws, {
-              type: "room:roster",
-              players: roster,
-              matchState: room.matchState
-            });
+          const session = room.players.get(boundSlot);
+          if (session && session.ws === ws) {
+            session.connected = false;
+            session.ws = null;
+            if (room.tvWs) {
+              safeSend(room.tvWs, {
+                type: "player:disconnected",
+                slot: boundSlot,
+                id: session.id,
+                reconnectWindowSec: 15
+              });
+            }
+            session.disconnectTimer = setTimeout(() => {
+              if (!session.connected) {
+                room.players.delete(boundSlot);
+                if (room.tvWs) {
+                  safeSend(room.tvWs, {
+                    type: "player:left",
+                    slot: boundSlot
+                  });
+                }
+                const roster = Array.from(room.players.values()).map((p) => ({
+                  slot: p.slot,
+                  id: p.id,
+                  name: p.name,
+                  team: p.team,
+                  ready: p.ready
+                }));
+                for (const p of room.players.values()) {
+                  safeSend(p.ws, {
+                    type: "room:roster",
+                    players: roster,
+                    matchState: room.matchState
+                  });
+                }
+              }
+            }, 15e3);
           }
         }
       }

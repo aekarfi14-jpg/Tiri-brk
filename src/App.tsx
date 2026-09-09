@@ -9,6 +9,8 @@ import { VirtualControllerModal } from './components/VirtualControllerModal.tsx'
 import { GameEngine } from './game/gameEngine.ts';
 import { MatchState, MatchSummary, PlayerInput, PlayerSlotData, TeamId, WeaponType } from './types.ts';
 import { sound } from './audio/soundEngine.ts';
+import { isNativeAndroid, startLocalHostServer, stopLocalHostServer } from './network/nativeServer.ts';
+import { PhoneConnectionPayload } from './components/phone/PhoneScanner.tsx';
 
 type AppMode = 'select' | 'tv' | 'phone';
 
@@ -29,7 +31,9 @@ export default function App() {
 
   // Phone States
   const [phoneSlot, setPhoneSlot] = useState<number | null>(null);
-  const [phonePlayerId, setPhonePlayerId] = useState<string>('');
+  const [phonePlayerId, setPhonePlayerId] = useState<string>(() => {
+    return `phone_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+  });
   const [phoneName, setPhoneName] = useState<string>('Player 1');
   const [phoneTeam, setPhoneTeam] = useState<TeamId>('RED');
   const [phoneReady, setPhoneReady] = useState(false);
@@ -38,10 +42,19 @@ export default function App() {
   const [isWsConnected, setIsWsConnected] = useState(false);
   const [phoneLatency, setPhoneLatency] = useState<number | null>(null);
 
+  // Connection & Host Routing States
+  const [targetHost, setTargetHost] = useState<string>('');
+  const [targetPort, setTargetPort] = useState<number>(3000);
+  const [connectionError, setConnectionError] = useState<string | null>(null);
+  const [isConnecting, setIsConnecting] = useState(false);
+  const [phoneConnectionState, setPhoneConnectionState] = useState<
+    'IDLE' | 'CONNECTING' | 'CONNECTED' | 'RECONNECTING'
+  >('IDLE');
+
   // Practice Mode tracking
   const isPracticeRef = useRef<{ isPractice: boolean; botCount: number }>({
     isPractice: false,
-    botCount: 2,
+    botCount: 0,
   });
 
   // Virtual Controller Simulator modal state (for preview testing)
@@ -50,6 +63,21 @@ export default function App() {
   // WebSocket Ref
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimerRef = useRef<any>(null);
+
+  // Auto-start Local Server when TV Mode is chosen
+  useEffect(() => {
+    if (mode === 'tv') {
+      startLocalHostServer(3000, roomCode || '7942').then((res) => {
+        if (res.roomCode && !roomCode) setRoomCode(res.roomCode);
+        if (res.port) setTargetPort(res.port);
+      });
+    }
+    return () => {
+      if (mode === 'tv') {
+        stopLocalHostServer();
+      }
+    };
+  }, [mode]);
 
   // Initialize Authoritative Game Engine on TV
   useEffect(() => {
@@ -66,7 +94,7 @@ export default function App() {
               type: 'tv:match_state',
               matchState: state,
               winnerTeam: summary?.winnerTeam || null,
-              winnerNames: summary?.winnerPlayers || [],
+              winnerPlayers: summary?.winnerPlayers || [],
             })
           );
         }
@@ -92,6 +120,12 @@ export default function App() {
 
   // Helper to get WebSocket URL
   const getWsUrl = () => {
+    if (mode === 'phone' && targetHost) {
+      return `ws://${targetHost}:${targetPort || 3000}/ws`;
+    }
+    if (mode === 'tv' && isNativeAndroid()) {
+      return `ws://127.0.0.1:${targetPort || 3000}/ws`;
+    }
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     return `${protocol}//${window.location.host}/ws`;
   };
@@ -105,6 +139,9 @@ export default function App() {
 
       ws.onopen = () => {
         setIsWsConnected(true);
+        setIsConnecting(false);
+        setPhoneConnectionState('CONNECTED');
+        setConnectionError(null);
 
         if (mode === 'tv') {
           // Register as TV host
@@ -115,7 +152,7 @@ export default function App() {
             })
           );
         } else if (mode === 'phone' && roomCode) {
-          // Register as phone controller
+          // Register as phone controller (sends playerId to reclaim reserved slot if reconnecting)
           ws.send(
             JSON.stringify({
               type: 'phone:join_room',
@@ -167,6 +204,28 @@ export default function App() {
             });
           }
 
+          if (msg.type === 'player:disconnected') {
+            setTvPlayers((prev) =>
+              prev.map((p) => (p.slot === msg.slot ? { ...p, connected: false } : p))
+            );
+          }
+
+          if (msg.type === 'player:reconnected') {
+            sound.playClick();
+            setTvPlayers((prev) =>
+              prev.map((p) =>
+                p.slot === msg.slot
+                  ? {
+                      ...p,
+                      connected: true,
+                      name: msg.name || p.name,
+                      team: msg.team || p.team,
+                    }
+                  : p
+              )
+            );
+          }
+
           if (msg.type === 'player:left') {
             setTvPlayers((prev) => prev.filter((p) => p.slot !== msg.slot));
           }
@@ -192,14 +251,19 @@ export default function App() {
             sound.playClick();
             setPhoneSlot(msg.slot);
             setPhonePlayerId(msg.playerId);
-            setPhoneName(msg.name);
-            setPhoneTeam(msg.team);
+            if (msg.name) setPhoneName(msg.name);
+            if (msg.team) setPhoneTeam(msg.team);
             setMatchState(msg.matchState || 'LOBBY');
+            setConnectionError(null);
+            setIsConnecting(false);
+            setPhoneConnectionState('CONNECTED');
           }
 
           if (msg.type === 'join:error') {
-            alert(msg.message || 'Could not join room');
-            setRoomCode('');
+            setConnectionError(msg.message || 'Could not join room');
+            setIsConnecting(false);
+            setPhoneConnectionState('IDLE');
+            setPhoneSlot(null);
           }
 
           if (msg.type === 'profile:updated') {
@@ -237,9 +301,10 @@ export default function App() {
           }
 
           if (msg.type === 'kicked') {
-            alert('You were disconnected by the TV host.');
+            setConnectionError('You were disconnected by the TV host.');
             setPhoneSlot(null);
             setRoomCode('');
+            setPhoneConnectionState('IDLE');
           }
         } catch (e) {
           console.error('WS parse error:', e);
@@ -248,6 +313,9 @@ export default function App() {
 
       ws.onclose = () => {
         setIsWsConnected(false);
+        if (mode === 'phone' && phoneSlot !== null) {
+          setPhoneConnectionState('RECONNECTING');
+        }
         // Attempt reconnect after 2 seconds
         clearTimeout(reconnectTimerRef.current);
         reconnectTimerRef.current = setTimeout(connectWebSocket, 2000);
@@ -259,7 +327,7 @@ export default function App() {
       clearTimeout(reconnectTimerRef.current);
       reconnectTimerRef.current = setTimeout(connectWebSocket, 2500);
     }
-  }, [mode, roomCode, phonePlayerId, phoneName, phoneTeam, matchState]);
+  }, [mode, roomCode, phonePlayerId, phoneName, phoneTeam, matchState, targetHost, targetPort]);
 
   // Connect whenever TV or Phone mode is chosen
   useEffect(() => {
@@ -409,8 +477,13 @@ export default function App() {
   };
 
   // Phone Actions
-  const handlePhoneConnect = (scannedCode: string) => {
-    setRoomCode(scannedCode);
+  const handlePhoneConnect = (payload: PhoneConnectionPayload) => {
+    setRoomCode(payload.roomCode);
+    if (payload.host) setTargetHost(payload.host);
+    if (payload.port) setTargetPort(payload.port);
+    setConnectionError(null);
+    setIsConnecting(true);
+    setPhoneConnectionState('CONNECTING');
   };
 
   const handlePhoneUpdateProfile = (name: string, team: TeamId) => {
@@ -451,11 +524,15 @@ export default function App() {
   };
 
   const handlePhoneDisconnect = () => {
+    sound.playClick();
     if (wsRef.current) {
       wsRef.current.close();
+      wsRef.current = null;
     }
     setPhoneSlot(null);
     setRoomCode('');
+    setConnectionError(null);
+    setPhoneConnectionState('IDLE');
   };
 
   // Feed simulated input directly to engine
@@ -534,6 +611,8 @@ export default function App() {
       return (
         <PhoneScanner
           initialCode={roomCode}
+          connectionError={connectionError}
+          isConnecting={isConnecting || phoneConnectionState === 'CONNECTING'}
           onConnect={handlePhoneConnect}
           onSwitchToTv={() => {
             setMode('tv');
@@ -545,35 +624,50 @@ export default function App() {
       );
     }
 
-    if (matchState === 'LOBBY') {
-      return (
-        <PhoneLobby
-          roomCode={roomCode}
-          slot={phoneSlot}
-          playerName={phoneName}
-          playerTeam={phoneTeam}
-          isReady={phoneReady}
-          isConnected={isWsConnected}
-          onUpdateProfile={handlePhoneUpdateProfile}
-          onToggleReady={handlePhoneToggleReady}
-          onDisconnect={handlePhoneDisconnect}
-        />
-      );
-    }
-
-    // MATCH STARTED: Phone transforms into wireless gamepad controller!
     return (
-      <PhoneController
-        slot={phoneSlot}
-        playerName={phoneName}
-        playerTeam={phoneTeam}
-        selectedWeapon={phoneSelectedWeapon}
-        hp={phoneHp}
-        maxHp={100}
-        latencyMs={phoneLatency ?? undefined}
-        onSendInput={handlePhoneSendInput}
-        onDisconnect={handlePhoneDisconnect}
-      />
+      <>
+        {/* Reconnecting Overlay Banner */}
+        {phoneSlot !== null && !isWsConnected && (
+          <div className="fixed top-0 left-0 right-0 z-50 bg-amber-600 text-white text-xs px-4 py-2.5 flex items-center justify-between font-bold shadow-lg animate-pulse backdrop-blur-md">
+            <div className="flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-white animate-ping" />
+              <span>Connection lost. Reconnecting to TV host (15s slot grace)...</span>
+            </div>
+            <button
+              onClick={handlePhoneDisconnect}
+              className="px-2.5 py-1 rounded bg-black/40 hover:bg-black/60 text-[10px] uppercase font-bold text-white transition-all cursor-pointer"
+            >
+              Cancel
+            </button>
+          </div>
+        )}
+
+        {matchState === 'LOBBY' ? (
+          <PhoneLobby
+            roomCode={roomCode}
+            slot={phoneSlot}
+            playerName={phoneName}
+            playerTeam={phoneTeam}
+            isReady={phoneReady}
+            isConnected={isWsConnected}
+            onUpdateProfile={handlePhoneUpdateProfile}
+            onToggleReady={handlePhoneToggleReady}
+            onDisconnect={handlePhoneDisconnect}
+          />
+        ) : (
+          <PhoneController
+            slot={phoneSlot}
+            playerName={phoneName}
+            playerTeam={phoneTeam}
+            selectedWeapon={phoneSelectedWeapon}
+            hp={phoneHp}
+            maxHp={100}
+            latencyMs={phoneLatency ?? undefined}
+            onSendInput={handlePhoneSendInput}
+            onDisconnect={handlePhoneDisconnect}
+          />
+        )}
+      </>
     );
   }
 

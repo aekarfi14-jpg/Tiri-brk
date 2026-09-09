@@ -1,0 +1,83 @@
+name: Build Android APK (Tiri-brk)
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build-apk:
+    name: Build & Verify Android APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 1. Checkout repository
+        uses: actions/checkout@v4
+
+      - name: 2. Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: 3. Install NPM Dependencies
+        run: |
+          npm ci || npm install
+
+      - name: 4. Build Web Application
+        run: |
+          npm run build
+
+      - name: 5. Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+          cache: 'gradle'
+
+      - name: 6. Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: 7. Accept Android SDK Licenses
+        run: |
+          yes | sdkmanager --licenses || true
+
+      - name: 8. Sync Capacitor Android Platform
+        run: |
+          npx cap sync android
+
+      - name: 9. Grant Execute Permissions to Gradle Wrapper
+        run: |
+          chmod +x android/gradlew
+
+      - name: 10. Build Debug APK with Gradle
+        working-directory: android
+        run: |
+          ./gradlew assembleDebug --stacktrace
+
+      - name: 11. Strict Verification of Generated APK
+        run: |
+          APK_PATH="android/app/build/outputs/apk/debug/app-debug.apk"
+          if [ ! -f "$APK_PATH" ]; then
+            echo "::error::CRITICAL FAILURE: $APK_PATH does not exist after gradle assembleDebug!"
+            exit 1
+          fi
+          echo "==============================================="
+          echo "✓ VERIFIED: Android APK built successfully!"
+          echo "Size: $(ls -lh "$APK_PATH" | awk '{print $5}')"
+          echo "Path: $APK_PATH"
+          echo "==============================================="
+          # Copy to friendly name
+          cp "$APK_PATH" android/app/build/outputs/apk/debug/Tiri-brk-debug.apk
+
+      - name: 12. Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Tiri-brk-debug-apk
+          path: |
+            android/app/build/outputs/apk/debug/app-debug.apk
+            android/app/build/outputs/apk/debug/Tiri-brk-debug.apk
+          if-no-files-found: error
+          retention-days: 14

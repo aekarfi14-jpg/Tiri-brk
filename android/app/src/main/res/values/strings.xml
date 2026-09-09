@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Neo Strike 2D</string>
+    <string name="title_activity_main">Neo Strike 2D</string>
+    <string name="package_name">com.arcadepulse.neostrike2d</string>
+    <string name="custom_url_scheme">com.arcadepulse.neostrike2d</string>
+</resources>

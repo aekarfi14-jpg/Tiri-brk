@@ -1,0 +1,10 @@
+{
+	"appId": "com.arcadepulse.neostrike2d",
+	"appName": "Neo Strike 2D",
+	"webDir": "dist",
+	"server": {
+		"androidScheme": "https",
+		"cleartext": true
+	},
+	"android": {}
+}

@@ -105,14 +105,21 @@ export class GameEngine {
   }
 
   // Initialize Practice / Bot Training Match
-  public initPracticeMatch(humanRoster: PlayerSlotData[], botCount: number = 2) {
+  public initPracticeMatch(humanRoster: PlayerSlotData[], botCount: number = 0) {
     const fullRoster: PlayerSlotData[] = [...humanRoster];
     const botTeams: TeamId[] = ['BLUE', 'GREEN', 'RED'];
-    const botNames = ['Training Drone Alfa', 'Combat Dummy Bravo', 'Assault Bot Echo'];
+    const botNames = [
+      'Practice Drone Alpha',
+      'Training Bot Bravo',
+      'Combat Dummy Charlie',
+      'Assault Bot Delta',
+      'Sentinel Drone Echo',
+      'Vanguard Bot Foxtrot',
+    ];
 
     for (let b = 1; b <= botCount; b++) {
       const botSlot = fullRoster.length + 1;
-      if (botSlot <= 4) {
+      if (botSlot <= 8) {
         fullRoster.push({
           slot: botSlot,
           id: `bot_${Date.now()}_${b}`,

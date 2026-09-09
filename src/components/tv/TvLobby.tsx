@@ -49,7 +49,7 @@ export const TvLobby: React.FC<TvLobbyProps> = ({
   const [editName, setEditName] = useState('');
   const [editTeam, setEditTeam] = useState<TeamId>('RED');
   const [isMuted, setIsMuted] = useState(sound.getMuted());
-  const [botCount, setBotCount] = useState<number>(2);
+  const [botCount, setBotCount] = useState<number>(0);
   const [localIps, setLocalIps] = useState<string[]>([]);
   const [useLocalIp, setUseLocalIp] = useState<boolean>(false);
 
@@ -65,15 +65,29 @@ export const TvLobby: React.FC<TvLobbyProps> = ({
       .catch(() => {});
   }, []);
 
-  // Join URL that mobile phones will open
-  const lanHost = localIps[0] ? `http://${localIps[0]}:3000` : '';
+  const [qrFormat, setQrFormat] = useState<'json' | 'url'>('json');
+
+  // Primary LAN IP for direct controller connection
+  const primaryLanIp = localIps[0] || (typeof window !== 'undefined' ? window.location.hostname : '127.0.0.1');
+
+  // LAN JSON Payload (Requested format for direct offline LAN connection)
+  const lanJsonPayload = JSON.stringify({
+    host: primaryLanIp,
+    port: 3000,
+    room: roomCode,
+  });
+
+  // Browser web URL fallback
+  const lanHost = primaryLanIp ? `http://${primaryLanIp}:3000` : '';
   const currentOrigin = typeof window !== 'undefined' ? window.location.origin : '';
-  const effectiveBase = (useLocalIp && lanHost) ? lanHost : currentOrigin;
-  const joinUrl = effectiveBase ? `${effectiveBase}/?mode=phone&room=${roomCode}` : '';
+  const effectiveBase = lanHost || currentOrigin;
+  const joinUrl = effectiveBase ? `${effectiveBase}/?mode=phone&room=${roomCode}&host=${primaryLanIp}&port=3000` : '';
+
+  const qrPayload = qrFormat === 'json' ? lanJsonPayload : joinUrl;
 
   useEffect(() => {
     if (roomCode) {
-      QRCode.toDataURL(joinUrl, {
+      QRCode.toDataURL(qrPayload, {
         width: 320,
         margin: 1,
         color: {
@@ -84,7 +98,7 @@ export const TvLobby: React.FC<TvLobbyProps> = ({
         .then((url) => setQrDataUrl(url))
         .catch((err) => console.error('QR generation error:', err));
     }
-  }, [roomCode, joinUrl]);
+  }, [roomCode, qrPayload]);
 
   const copyCode = () => {
     sound.playClick();
@@ -192,12 +206,24 @@ export const TvLobby: React.FC<TvLobbyProps> = ({
             )}
           </div>
 
-          {/* Fallback Connection Code & Network Selector */}
-          <div className="w-full bg-slate-950/80 border border-slate-800 rounded-2xl p-4 flex flex-col gap-3 mb-4">
+          {/* Host Ready & Connection Info Card */}
+          <div className="w-full bg-slate-950/90 border border-cyan-500/40 rounded-2xl p-4 flex flex-col gap-2.5 mb-4 shadow-[0_0_20px_rgba(6,182,212,0.15)]">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                <span className="text-xs font-black uppercase tracking-wider text-emerald-400 font-mono">
+                  HOST READY
+                </span>
+              </div>
+              <span className="text-[11px] text-slate-400 font-mono">
+                Port: 3000
+              </span>
+            </div>
+
             <div className="flex items-center justify-between">
               <div>
                 <span className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold block">
-                  FALLBACK ROOM CODE
+                  ROOM CODE
                 </span>
                 <span className="text-2xl font-black font-['Chakra_Petch'] tracking-widest text-cyan-400">
                   {roomCode || '----'}
@@ -206,34 +232,51 @@ export const TvLobby: React.FC<TvLobbyProps> = ({
               <button
                 id="btn-copy-code"
                 onClick={copyCode}
-                className="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-all cursor-pointer flex items-center gap-1.5 text-xs font-semibold"
+                className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-all cursor-pointer flex items-center gap-1.5 text-xs font-semibold"
               >
                 {copied ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
                 {copied ? 'Copied' : 'Copy'}
               </button>
             </div>
 
-            {/* Wi-Fi LAN IP Toggle if available */}
-            {localIps.length > 0 && (
-              <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-xs">
-                <span className="text-slate-400 flex items-center gap-1">
-                  <Wifi className="w-3.5 h-3.5 text-cyan-400" />
-                  Wi-Fi LAN IP:
-                </span>
+            <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-xs">
+              <span className="text-slate-400 flex items-center gap-1">
+                <Wifi className="w-3.5 h-3.5 text-cyan-400" />
+                Wi-Fi / LAN IP:
+              </span>
+              <span className="font-mono text-cyan-300 font-bold text-xs bg-slate-900 px-2 py-0.5 rounded border border-cyan-500/30">
+                {primaryLanIp}
+              </span>
+            </div>
+
+            {/* QR Format Selector */}
+            <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-[11px]">
+              <span className="text-slate-400">QR Payload:</span>
+              <div className="flex gap-1 bg-slate-900 p-0.5 rounded-lg border border-slate-800">
                 <button
                   type="button"
-                  onClick={() => setUseLocalIp(!useLocalIp)}
-                  className={`px-2 py-1 rounded-lg font-mono text-[11px] transition-all cursor-pointer border ${
-                    useLocalIp
-                      ? 'bg-cyan-500/20 border-cyan-400 text-cyan-300'
-                      : 'bg-slate-800 border-slate-700 text-slate-400 hover:text-white'
+                  onClick={() => setQrFormat('json')}
+                  className={`px-2 py-0.5 rounded text-[10px] font-bold cursor-pointer transition-all ${
+                    qrFormat === 'json'
+                      ? 'bg-cyan-500 text-slate-950 font-black'
+                      : 'text-slate-400 hover:text-white'
                   }`}
-                  title="Switch between browser origin and direct Wi-Fi local IP"
                 >
-                  {localIps[0]}:3000 {useLocalIp ? '✓ Active' : '(Click to use in QR)'}
+                  Offline JSON
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setQrFormat('url')}
+                  className={`px-2 py-0.5 rounded text-[10px] font-bold cursor-pointer transition-all ${
+                    qrFormat === 'url'
+                      ? 'bg-emerald-500 text-slate-950 font-black'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  Web URL
                 </button>
               </div>
-            )}
+            </div>
           </div>
 
           {/* Gameplay Engine Feature Badges */}
@@ -299,7 +342,7 @@ export const TvLobby: React.FC<TvLobbyProps> = ({
           {/* 4 Player Slots Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {[1, 2, 3, 4].map((slotNum) => {
-              const player = players.find((p) => p.slot === slotNum && p.connected);
+              const player = players.find((p) => p.slot === slotNum);
               const isEditing = editingSlot === slotNum;
 
               if (!player) {
@@ -318,6 +361,43 @@ export const TvLobby: React.FC<TvLobbyProps> = ({
               }
 
               const teamDef = TEAMS[player.team] || TEAMS.RED;
+
+              if (!player.connected) {
+                return (
+                  <div
+                    key={slotNum}
+                    id={`player-slot-reconnecting-${slotNum}`}
+                    className="p-5 rounded-2xl bg-amber-950/20 border-2 border-dashed border-amber-500/60 transition-all flex flex-col justify-between min-h-[140px] animate-pulse"
+                  >
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-slate-800 text-slate-300">
+                            SLOT {slotNum}
+                          </span>
+                          <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                            RECONNECTING...
+                          </span>
+                        </div>
+                        <h3 className="text-lg font-black font-['Chakra_Petch'] mt-1 tracking-wide text-slate-300">
+                          {player.name}
+                        </h3>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => onKickPlayer(slotNum)}
+                        className="p-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-400 hover:text-red-400 text-xs cursor-pointer"
+                        title="Free slot immediately"
+                      >
+                        Free Slot
+                      </button>
+                    </div>
+                    <div className="text-[11px] text-amber-400/90 font-medium">
+                      Holding slot for 15s grace period if phone reconnects...
+                    </div>
+                  </div>
+                );
+              }
 
               return (
                 <div
@@ -486,9 +566,13 @@ export const TvLobby: React.FC<TvLobbyProps> = ({
                     onChange={(e) => setBotCount(Number(e.target.value))}
                     className="bg-slate-800 border border-slate-700 rounded-xl px-2.5 py-1.5 text-xs text-slate-200 font-bold cursor-pointer"
                   >
+                    <option value={0}>0 Bots (Solo Free Roam)</option>
                     <option value={1}>1 Bot</option>
                     <option value={2}>2 Bots</option>
                     <option value={3}>3 Bots</option>
+                    <option value={4}>4 Bots</option>
+                    <option value={5}>5 Bots</option>
+                    <option value={6}>6 Bots</option>
                   </select>
 
                   <button

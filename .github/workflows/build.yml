@@ -16,10 +16,10 @@ jobs:
       - name: 1. Checkout repository
         uses: actions/checkout@v4
 
-      - name: 2. Setup Node.js 20
+      - name: 2. Setup Node.js 22
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: 'npm'
 
       - name: 3. Install NPM Dependencies
@@ -69,7 +69,6 @@ jobs:
           echo "Size: $(ls -lh "$APK_PATH" | awk '{print $5}')"
           echo "Path: $APK_PATH"
           echo "==============================================="
-          # Copy to friendly name
           cp "$APK_PATH" android/app/build/outputs/apk/debug/Tiri-brk-debug.apk
 
       - name: 12. Upload APK Artifact
